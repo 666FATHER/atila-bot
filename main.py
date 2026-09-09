@@ -1,57 +1,94 @@
-import os, telebot, requests
+import os, telebot, requests, time
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CHAT_ID = os.getenv("CHAT_ID")
+
+if not BOT_TOKEN or not CHAT_ID:
+    print("Falta BOT_TOKEN o CHAT_ID en Variables")
+    exit(1)
+
 bot = telebot.TeleBot(BOT_TOKEN)
 
 def get_klines(symbol, limit=100):
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=5m&limit={limit}"
-    d = requests.get(url, timeout=10).json()
-    closes = [float(k[4]) for k in d]
-    vols = [float(k[5]) for k in d]
-    return closes, vols
+    urls = [
+        f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1h&limit={limit}",
+        f"https://data-api.binance.vision/api/v3/klines?symbol={symbol}&interval=1h&limit={limit}"
+    ]
+    for url in urls:
+        try:
+            r = requests.get(url, timeout=15)
+            d = r.json()
+            # Binance a veces devuelve {"msg": "error"} en vez de lista
+            if isinstance(d, list) and len(d) > 20:
+                closes = [float(k[4]) for k in d]
+                vols = [float(k[5]) for k in d]
+                return closes, vols
+            else:
+                print(f"Respuesta rara de Binance: {str(d)[:100]}")
+        except Exception as e:
+            print(f"Error pidiendo {symbol} en {url}: {e}")
+            continue
+    return [], []
 
 def ema(data, p):
-    e = sum(data[:p])/p
-    k = 2/(p+1)
+    if len(data) < p:
+        return 0
+    e = sum(data[:p]) / p
+    k = 2 / (p + 1)
     for price in data[p:]:
-        e = price*k + e*(1-k)
+        e = price * k + e * (1 - k)
     return e
 
 def rsi(closes, p=14):
+    if len(closes) < p + 1:
+        return 50
     gains, losses = [], []
     for i in range(1, len(closes)):
-        diff = closes[i]-closes[i-1]
-        gains.append(max(diff,0)); losses.append(abs(min(diff,0)))
-    ag = sum(gains[-p:])/p; al = sum(losses[-p:])/p
-    if al==0: return 75
-    return 100 - (100/(1+ag/al))
+        diff = closes[i] - closes[i-1]
+        gains.append(max(diff, 0))
+        losses.append(max(-diff, 0))
+    ag = sum(gains[-p:]) / p
+    al = sum(losses[-p:]) / p
+    if al == 0:
+        return 75
+    rs = ag / al
+    return 100 - (100 / (1 + rs))
 
-def analizar_5m(symbol):
+def check_symbol(symbol):
     closes, vols = get_klines(symbol)
+    if not closes:
+        print(f"Sin datos para {symbol}, salto")
+        return
+
     price = closes[-1]
-    ema9 = ema(closes, 9); ema21 = ema(closes, 21); ema50 = ema(closes, 50)
-    rsi14 = rsi(closes, 14)
-    vol_avg = sum(vols[-20:-1])/19; vol_now = vols[-1]
-    tendencia = "ALCISTA" if ema9 > ema21 and ema21 > ema50 else "BAJISTA" if ema9 < ema21 and ema21 < ema50 else "LATERAL"
-    if ema9 > ema21 and price > ema21 and 35 < rsi14 < 58 and tendencia=="ALCISTA" and vol_now > vol_avg*1.2:
-        return f"🟢 ATILA 5M LONG {symbol}\n💰 Entrada 5M: ${price:.4f}\nRSI {rsi14:.1f} Tend {tendencia}\n📍 ENTRADA CIERRE VELA 5M\n🛑 SL ${price*0.997:.4f} (-0.3%)\n🎯 TP1 ${price*1.005:.4f} (+0.5%)\n🎯 TP2 ${price*1.01:.4f} (+1%)"
-    elif ema9 < ema21 and price < ema21 and 42 < rsi14 < 68 and tendencia=="BAJISTA" and vol_now > vol_avg*1.2:
-        return f"🔴 ATILA 5M SHORT {symbol}\n💰 Entrada 5M: ${price:.4f}\nRSI {rsi14:.1f} Tend {tendencia}\n📍 ENTRADA CIERRE VELA 5M\n🛑 SL ${price*1.003:.4f} (+0.3%)\n🎯 TP1 ${price*0.995:.4f} (-0.5%)\n🎯 TP2 ${price*0.99:.4f} (-1%)"
-    else:
-        return f"🟡 {symbol} NO ENTRAR 5M\n💰 ${price:.4f} RSI {rsi14:.1f} Tend {tendencia}\nEspera proxima vela 5m FATHER"
+    e9 = ema(closes, 9)
+    e21 = ema(closes, 21)
+    e50 = ema(closes, 50)
+    r = rsi(closes, 14)
+    vol_prom = sum(vols[-20:]) / 20 if len(vols) >= 20 else 0
+    vol_ok = vols[-1] > vol_prom
 
-@bot.message_handler(commands=['start','analizar','senal'])
-def handler(m):
-    txt = m.text
-    if "senal" in txt:
-        bot.reply_to(m, "⚡️ ATILA 5M escaneando...")
-        for c in ["BTCUSDT","ETHUSDT","SOLUSDT"]:
-            bot.send_message(m.chat.id, analizar_5m(c))
-    else:
-        parts = txt.split()
-        coin = parts[1].upper() if len(parts)>1 else "BTC"
-        if "USDT" not in coin: coin+="USDT"
-        bot.send_message(m.chat.id, analizar_5m(coin))
+    print(f"{symbol} P:{price:.2f} EMA9:{e9:.2f} EMA21:{e21:.2f} RSI:{r:.1f} VOL_OK:{vol_ok}")
 
-print("ATILA 5M PURO INICIADO")
-bot.infinity_polling()
+    # Señal LONG
+    if e9 > e21 and e21 > e50 and r > 50 and r < 70 and vol_ok:
+        msg = f"🟢 ATILA LONG {symbol}\nPrecio: {price}\nEMA9 {e9:.1f} > EMA21 {e21:.1f} > EMA50 {e50:.1f}\nRSI: {r:.1f}\nVol: OK"
+        bot.send_message(CHAT_ID, msg)
+        print(f"Enviada señal LONG {symbol}")
+
+def main_loop():
+    symbols = ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"]
+    while True:
+        try:
+            for sym in symbols:
+                check_symbol(sym)
+                time.sleep(2)
+        except Exception as e:
+            print(f"Error en main_loop: {e}")
+        print("Durmiendo 5 min...")
+        time.sleep(300)
+
+if __name__ == "__main__":
+    print("ATILA INICIADO - 666FATHER MODE")
+    bot.send_message(CHAT_ID, "✅ ATILA conectado y arreglado FATHER - Ya no se cae")
+    main_loop()
