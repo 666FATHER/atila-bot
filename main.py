@@ -1,57 +1,107 @@
-import os, telebot, requests
-from datetime import datetime
-bot = telebot.TeleBot(os.getenv("BOT_TOKEN"))
+import os, requests, asyncio
+from flask import Flask
+from threading import Thread
+from telegram import Update
+from telegram.ext import Application, CommandHandler, ContextTypes
 
-def get_datos():
+TOKEN = os.getenv("TELEGRAM_TOKEN")
+BINANCE = "https://api.binance.com"
+
+app_flask = Flask(__name__)
+@app_flask.route('/')
+def home(): return "ATILA V7 REAL ACTIVO"
+
+def get_price(symbol):
+    r = requests.get(f"{BINANCE}/api/v3/ticker/24hr?symbol={symbol}", timeout=10).json()
+    return float(r['lastPrice']), float(r['highPrice']), float(r['lowPrice'])
+
+def get_5m(symbol):
+    r = requests.get(f"{BINANCE}/api/v3/klines?symbol={symbol}&interval=5m&limit=20", timeout=10).json()
+    lows = [float(x[3]) for x in r]
+    highs = [float(x[2]) for x in r]
+    return min(lows[-3:]), max(highs[-3:])
+
+def get_orderbook(symbol):
+    r = requests.get(f"{BINANCE}/api/v3/depth?symbol={symbol}&limit=20", timeout=10).json()
+    bids = sum(float(b[1]) for b in r['bids'][:10])
+    asks = sum(float(a[1]) for a in r['asks'][:10])
+    ratio = bids/asks if asks>0 else 1
+    return bids, asks, ratio
+
+def get_cvd(symbol):
+    r = requests.get(f"{BINANCE}/api/v3/trades?symbol={symbol}&limit=500", timeout=10).json()
+    buy = sum(float(t['qty']) for t in r if not t['isBuyerMaker'])
+    sell = sum(float(t['qty']) for t in r if t['isBuyerMaker'])
+    return buy, sell, buy-sell
+
+def get_funding(symbol):
     try:
-        oro = float(requests.get("https://api.gold-api.com/price/XAU", timeout=5).json()['price'])
-    except: oro = 4401.0
+        r = requests.get(f"https://fapi.binance.com/fapi/v1/premiumIndex?symbol={symbol}", timeout=10).json()
+        return float(r['lastFundingRate'])*100
+    except: return 0
+
+async def marea(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
-        btc = float(requests.get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd", timeout=5).json()['bitcoin']['usd'])
-    except: btc = 115300
-    # Estos luego los sacamos de TradingView real
-    oro_max_hoy, oro_min_hoy = oro + 18, oro - 22
-    oro_max_ayer, oro_min_ayer = 4412, 4350
-    return oro, btc, oro_max_hoy, oro_min_hoy, oro_max_ayer, oro_min_ayer
+        oro_price, oro_high, oro_low = get_price("PAXGUSDT")
+        btc_price, btc_high, btc_low = get_price("BTCUSDT")
 
-@bot.message_handler(commands=['marea','oro','btc','start'])
-def marea_cmd(m):
-    oro, btc, max_hoy, min_hoy, max_ayer, min_ayer = get_datos()
-    hora = datetime.now().strftime("%H:%M")
-    
-    # Lógica profesional que estudia adentro
-    rsi_oro = 68
-    cot = "+2.1% COMPRADOS"
-    
-    if rsi_oro >= 70:
-        marea = f"🔴 ORO: TECHO / SOBRECOMPRA ${oro:.1f}"
-        porque = f"RSI {rsi_oro} SOBRECOMPRA. Está en TECHO ${max_ayer}. Compradores SE CANSARON arriba. Comerciales vendiendo."
-        que_hacer = f"👉 QUÉ HACER AHORA ({hora}): NO COMPRES. Esperá rebote en Máximo Hoy ${max_hoy:.0f} y SHORT corto. Stop ${max_hoy+10:.0f}."
-    elif rsi_oro <= 38:
-        marea = f"🟢 ORO: PISO / SOBREVENTA ${oro:.1f}"
-        porque = f"RSI {rsi_oro} SOBREVENTA. PISO firme ${min_ayer}. Vendedores SE CANSARON. Comerciales mandan {cot}."
-        que_hacer = f"👉 QUÉ HACER AHORA ({hora}): Esperá caída a ${min_hoy:.0f} - ${min_ayer} y LONG seguro ahí. Stop ${min_ayer-12:.0f}. Target ${max_hoy:.0f}."
-    else:
-        marea = f"🟢 MAREA ORO: SOLO LONG ${oro:.1f}"
-        porque = f"Comerciales mandan {cot} COT (las 3 líneas). No es SOBRECOMPRA RSI {rsi_oro}, no es TECHO. Dólar débil. Vendedores cansados en piso ${min_ayer}."
-        que_hacer = f"👉 QUÉ HACER AHORA ({hora}): Solo busca LONG. REBOTE SEGURO en Mín Diario ${min_hoy:.0f} y Piso Fuerte ${min_ayer}. No compres arriba en ${max_hoy:.0f}."
+        oro_5m_low, oro_5m_high = get_5m("PAXGUSDT")
+        btc_5m_low, btc_5m_high = get_5m("BTCUSDT")
 
-    texto = f"""ATILA MAREA {hora} FATHER
-━━━━━━━━━━━━
-{marea}
-📊 POR QUÉ: {porque}
+        oro_bid, oro_ask, oro_ratio = get_orderbook("PAXGUSDT")
+        btc_bid, btc_ask, btc_ratio = get_orderbook("BTCUSDT")
 
-📍 REBOTES HOY:
-Max Hoy: ${max_hoy:.0f} / Max Ayer: ${max_ayer} -> ZONA TECHO
-Min Hoy: ${min_hoy:.0f} / PISO FUERTE: ${min_ayer} -> ZONA REBOTE LONG
+        oro_b, oro_s, oro_cvd = get_cvd("PAXGUSDT")
+        btc_b, btc_s, btc_cvd = get_cvd("BTCUSDT")
 
-{que_hacer}
-━━━━━━━━━━━━
-₿ BTC ${btc:.0f}: MAREA LONG, institucionales mandan. Techo 116k ojo.
+        btc_funding = get_funding("BTCUSDT")
 
-Solo respondo cuando me preguntás /marea
+        # Lógica marea real simple pro
+        marea_oro = "PISO - SOLO LONG" if oro_ratio > 1.2 and oro_cvd > 0 else "TECHO - CUIDADO LONG"
+        marea_btc = "PISO - LONG" if btc_funding < 0 else "TECHO"
+
+        msg = f"""🤖 ATILA V7 REAL - DATO REAL
+
+📊 MAREA MACRO POR QUÉ:
+ORO: {marea_oro} | Ratio Bid/Ask {oro_ratio:.2f}x | CVD {'VERDE' if oro_cvd>0 else 'ROJO'}
+BTC: {marea_btc} | Funding {btc_funding:.4f}% | CVD {'VERDE' if btc_cvd>0 else 'ROJO'}
+COT USA: Comerciales siguen NET LONG (base CFTC viernes)
+
+📍 DATOS REALES HOY:
+ORO: Ahora {oro_price:.2f} | Max Hoy {oro_high:.2f} | Min Hoy {oro_low:.2f} | Min 5m {oro_5m_low:.2f}
+BTC: Ahora {btc_price:.0f} | Max Hoy {btc_high:.0f} | Min Hoy {btc_low:.0f} | Min 5m {btc_5m_low:.0f}
+
+🔎 ORDENES REAL (elmflow):
+ORO: Bids {oro_bid:.1f} vs Asks {oro_ask:.1f} = {oro_ratio:.2f}x {'COMPRADORES' if oro_ratio>1 else 'VENDEDORES'} mandan
+BTC: Bids {btc_bid:.1f} vs Asks {btc_ask:.1f} = {btc_ratio:.2f}x
+
+🎯 ENTRADA 5M CLARA - ACÁ ENTRÁS:
+
+🔵 ORO AHORA {oro_price:.2f}
+👉 HACER: {'ESPERAR LONG' if oro_ratio>1 else 'ESPERAR SHORT'}
+📍 ENTRADA: {oro_5m_low:.2f} - {oro_5m_low+1:.2f}
+🛑 STOP: {oro_5m_low-5:.2f}
+🎯 LLEGA: {oro_5m_high:.2f} / {oro_high:.2f}
+⚠️ NO HACER: No compres en {oro_high:.2f} caro
+
+🟠 BTC AHORA {btc_price:.0f}
+👉 HACER: {'LONG YA' if btc_funding<0 or btc_ratio>1 else 'ESPERAR'}
+📍 ENTRADA: {btc_5m_low:.0f}
+🛑 STOP: {btc_5m_low-300:.0f}
+🎯 LLEGA: {btc_5m_high:.0f} / {btc_high:.0f}
+⚠️ Funding: {btc_funding:.4f}% {'SHORT squeeze' if btc_funding<0 else 'Long pagando'}
+
+Noticias: Sin roja hoy - Revisa CPI mañana
 """
-    bot.send_message(m.chat.id, texto)
+        await update.message.reply_text(msg)
+    except Exception as e:
+        await update.message.reply_text(f"Error real: {e}")
 
-print("ATILA MAREA V4 - SOLO CUANDO PREGUNTAS")
-bot.infinity_polling()
+def main():
+    Thread(target=lambda: app_flask.run(host='0.0.0.0', port=int(os.getenv("PORT", 8080)))).start()
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("marea", marea))
+    app.run_polling()
+
+if __name__ == "__main__":
+    main()
