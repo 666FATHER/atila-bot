@@ -1,24 +1,30 @@
-import os, requests
-from threading import Thread
+import os
 from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-TOKEN = (os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN") or "").strip()
+
+TOKEN = os.getenv("BOT_TOKEN") or os.getenv("TELEGRAM_BOT_TOKEN") or os.getenv("TELEGRAM_TOKEN") or os.getenv("TOKEN")
+
 app_flask = Flask(__name__)
-@app_flask.route('/')
-def home(): return "ATILA VIVO"
-def get_price(s):
-    try:
-        return float(requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={s}USDT", timeout=10).json()['price'])
-    except: return 0.0
+@app_flask.route("/")
+def home():
+    return "ATILA VIVO FATHER"
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("ATILA ACTIVO FATHER. Usa /marea")
+
 async def marea(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    oro=get_price("PAXG");btc=get_price("BTC");eth=get_price("ETH");sol=get_price("SOL")
-    await update.message.reply_text(f"🌊 ATILA - MAREA FATHER 🌊\n\n🥇 ORO: ${oro:,.2f}\n₿ BTC: ${btc:,.2f}\n💎 ETH: ${eth:,.2f}\n◎ SOL: ${sol:,.2f}\n\nBot: ACTIVO 24/7")
+    await update.message.reply_text("Marea: subiendo en MDQ FATHER - probando")
+
 def main():
-    Thread(target=lambda: app_flask.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))), daemon=True).start()
-    print(f"ATILA INICIADO TOKEN ...{TOKEN[-6:]}")
-    app=ApplicationBuilder().token(TOKEN).build()
+    print("ATILA INICIADO FATHER")
+    app = ApplicationBuilder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("marea", marea))
-    app.add_handler(CommandHandler("start", marea))
     app.run_polling()
-if __name__ == "__main__": main()
+
+if __name__ == "__main__":
+    import threading
+    port = int(os.environ.get("PORT", 8080))
+    threading.Thread(target=lambda: app_flask.run(host="0.0.0.0", port=port)).start()
+    main()
