@@ -98,10 +98,15 @@ Noticias: Sin roja hoy - Revisa CPI mañana
         await update.message.reply_text(f"Error real: {e}")
 
 def main():
-    Thread(target=lambda: app_flask.run(host='0.0.0.0', port=int(os.getenv("PORT", 8080)))).start()
+    Thread(target=lambda: app_flask.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))), daemon=True).start()
+    print(f"ATILA INICIADO FATHER - TOKEN ...{TOKEN[-5:]}")
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("marea", marea))
+    app.add_handler(CommandHandler("start", marea))
     app.run_polling()
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
