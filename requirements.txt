@@ -1,4 +1,2 @@
-python-telegram-bot==20.7
-Flask==2.3.3
-requests
-# cache-bust-08-05
+python-telegram-bot==22.3
+Flask==3.0.0
