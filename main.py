@@ -1,62 +1,24 @@
-import os
-import requests
+import os, requests
 from threading import Thread
 from flask import Flask
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
-
-# TOKEN - NO TOCAR
 TOKEN = (os.getenv("TELEGRAM_TOKEN") or os.getenv("BOT_TOKEN") or "").strip()
-
-# SERVIDOR WEB PARA RAILWAY
 app_flask = Flask(__name__)
-
 @app_flask.route('/')
-def home():
-    return "ATILA VIVO FATHER - BOT ACTIVO 24/7"
-
-def get_price(symbol):
+def home(): return "ATILA VIVO"
+def get_price(s):
     try:
-        url = f"https://api.binance.com/api/v3/ticker/price?symbol={symbol}USDT"
-        data = requests.get(url, timeout=10).json()
-        return float(data['price'])
-    except:
-        return 0.0
-
-# COMANDO /marea
+        return float(requests.get(f"https://api.binance.com/api/v3/ticker/price?symbol={s}USDT", timeout=10).json()['price'])
+    except: return 0.0
 async def marea(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    oro = get_price("PAXG")
-    btc = get_price("BTC")
-    eth = get_price("ETH")
-    sol = get_price("SOL")
-    
-    mensaje = f"""🌊 ATILA - MAREA FATHER 🌊
-
-🥇 ORO: ${oro:,.2f} USD
-₿ BTC: ${btc:,.2f} USD
-💎 ETH: ${eth:,.2f} USD
-◎ SOL: ${sol:,.2f} USD
-
-Fuente: Binance
-Bot: ACTIVO 24/7
-"""
-    await update.message.reply_text(mensaje)
-
-# INICIO
+    oro=get_price("PAXG");btc=get_price("BTC");eth=get_price("ETH");sol=get_price("SOL")
+    await update.message.reply_text(f"🌊 ATILA - MAREA FATHER 🌊\n\n🥇 ORO: ${oro:,.2f}\n₿ BTC: ${btc:,.2f}\n💎 ETH: ${eth:,.2f}\n◎ SOL: ${sol:,.2f}\n\nBot: ACTIVO 24/7")
 def main():
-    # Flask en segundo plano
     Thread(target=lambda: app_flask.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080))), daemon=True).start()
-    
-    print(f"ATILA INICIADO FATHER - TOKEN ...{TOKEN[-6:]}")
-    
-    # Bot de Telegram
-    app = ApplicationBuilder().token(TOKEN).build()
+    print(f"ATILA INICIADO TOKEN ...{TOKEN[-6:]}")
+    app=ApplicationBuilder().token(TOKEN).build()
     app.add_handler(CommandHandler("marea", marea))
     app.add_handler(CommandHandler("start", marea))
-    app.add_handler(CommandHandler("oro", marea))
-    app.add_handler(CommandHandler("btc", marea))
-    
     app.run_polling()
-
-if __name__ == "__main__":
-    main()
+if __name__ == "__main__": main()
