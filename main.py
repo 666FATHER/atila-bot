@@ -12,10 +12,10 @@ def home():
     return "ATILA VIVO"
 
 async def pro(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📊 ATILA PRO FATHER\nORO 5M: Piso 4312.0 RSI 36.7\n🔥 LONG YA SL 4307.5 TP +9 +19\nMarea: SOLO LONG")
+    await update.message.reply_text("📊 ATILA PRO FATHER\nORO 5M: 4312.0 RSI 36.7\nLONG YA - SL 4307.5 TP +9 +19")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("ATILA VIVO - Usa /pro")
+    await update.message.reply_text("ATILA VIVO - /pro")
 
 def run_flask():
     flask_app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 8080)))
