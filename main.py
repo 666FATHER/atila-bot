@@ -3,12 +3,16 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Hola Father, soy Atila Bot activo!")
+    await update.message.reply_text("Hola Father, Atila Bot funcionando!")
 
 def main():
     token = os.getenv("BOT_TOKEN")
+    if not token:
+        print("FALTA BOT_TOKEN")
+        return
     app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
+    print("Bot iniciado...")
     app.run_polling()
 
 if __name__ == "__main__":
