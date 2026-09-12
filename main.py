@@ -10,7 +10,7 @@ def main():
     if not token:
         print("FALTA BOT_TOKEN")
         return
-    app = Application.builder().token(token).build()
+        app = Application.builder().token(token).build()
     app.add_handler(CommandHandler("start", start))
     print("Bot iniciado...")
     app.run_polling(drop_pending_updates=True)
